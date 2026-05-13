@@ -15,9 +15,9 @@
 ### 3. 实用工具
 - **OpenClaw** - 安装 OpenClaw 工具
 
-### 4. QQ用户群
-- **Docker一键安装** - 安装 Docker
-- **Docker Compose一键安装** - 安装 Docker Compose
+### 4. Docker 一键安装
+- **Docker 一键安装** - 安装 Docker
+- **Docker Compose 一键安装** - 安装 Docker Compose
 
 ## 使用方法
 
