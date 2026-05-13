@@ -18,7 +18,7 @@ yellow() {
 }
 
 # 退出时统一打印署名（支持正常退出和 Ctrl+C 等）
-trap 'echo -e "\nDesigned by SailData.Cloud\n祝你天天开心"; exit' EXIT
+trap 'echo -e "\nDesigned by SailData.Cloud\n"; exit' EXIT
 
 #===========================
 # 基础信息
