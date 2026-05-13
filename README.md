@@ -1,4 +1,4 @@
-# SailData Script - 服务器管理脚本
+# Sail Script - 服务器管理脚本
 
 一个简洁实用的服务器管理一键脚本，由 SailData.Cloud 设计。
 
