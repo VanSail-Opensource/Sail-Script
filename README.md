@@ -2,7 +2,7 @@
 
 > 面向 Linux VPS / 服务器的轻量级交互式管理工具箱，由 **SailData.Cloud** 设计。
 
-Sail Script 保持单文件、开箱即用的特点，同时补齐服务器概览、网络诊断、系统维护、Docker 管理、面板安装、自更新和快捷命令等常用能力。
+Sail Script 保持单文件入口、开箱即用的特点，同时补齐服务器概览、网络诊断、NodeQuality、系统维护、Docker 管理、面板安装、自更新和快捷命令等常用能力。
 
 ## ✨ 功能
 
@@ -17,10 +17,47 @@ Sail Script 保持单文件、开箱即用的特点，同时补齐服务器概�
 ### 网络与 IP 工具
 
 - 公网 IP / ASN 信息
+- NodeQuality 官方一键运行
+- NodeQuality 国内网络受阻运行（CDN 镜像启动器）
 - 流媒体解锁与 IP 质量检测
 - Ping 延迟 / 丢包测试
 - HTTP DNS / TCP / TLS / Total 耗时测试
 - 监听端口查看
+
+#### NodeQuality 快捷命令
+
+官方直连版本：
+
+```bash
+./sail.sh NQ
+```
+
+等价于直接运行：
+
+```bash
+bash <(curl -sL https://run.NodeQuality.com)
+```
+
+国内网络受阻版本：
+
+```bash
+./sail.sh NQCN
+```
+
+`NQCN` 会通过 Sail Script 的 CDN 启动器获取最新版 NodeQuality，并针对上游脚本中的 GitHub 资源进行加速处理：
+
+- NodeQuality 主脚本：jsDelivr CDN
+- `raw.githubusercontent.com/LloydAsp/NodeQuality/...`：改写为 jsDelivr
+- GitHub Release 下载：通过 GitHub 下载加速代理
+- 执行前进行 `bash -n` 语法检查
+
+镜像启动器位于：
+
+```text
+scripts/nodequality-cn.sh
+```
+
+> `NQCN` 不直接 fork / 固化一整份 NodeQuality 源码，而是在运行时取得当前上游版本后修改下载入口，尽量避免上游更新后镜像长期过期。
 
 ### 系统维护
 
@@ -72,12 +109,14 @@ chmod +x sail.sh
 ./sail.sh
 ```
 
-> 当前重构版本正在开发分支 `agent/modernize-sail-script` 中，可先将 URL 中的 `main` 替换为该分支进行测试。
+> 当前重构版本正在开发分支 `agent/modernize-sail-script` 中，可先将 URL 中的 `main` 替换为该分支进行测试。`NQCN` 的 CDN 地址固定指向 `main`，因此需要相关文件合并到 `main` 后才能通过正式 CDN 入口测试。
 
 ## ⌨️ CLI 用法
 
 ```bash
 ./sail.sh info
+./sail.sh NQ
+./sail.sh NQCN
 ./sail.sh ports
 ./sail.sh docker status
 ./sail.sh docker install
@@ -102,6 +141,8 @@ sudo ./sail.sh install-shortcut
 ```bash
 sail
 sail info
+sail NQ
+sail NQCN
 sail docker status
 ```
 
@@ -111,14 +152,20 @@ Sail Script 中涉及系统变更的操作会尽量遵循以下规则：
 
 - 修改系统前检查 root 权限
 - 危险或外部脚本操作要求用户确认
-- 远程 Shell 脚本先下载到临时文件，再执行 `bash -n` 语法检查
-- 不使用 `curl ... | bash` 直接管道执行
+- 远程 Shell 脚本尽量先下载到临时文件，再执行 `bash -n` 语法检查
 - Docker 使用官方 `get.docker.com`
 - Docker Compose 使用官方 GitHub Release 二进制
 - 自更新前先校验 Bash 语法
 - Docker 清理默认不主动删除 volume
+- `NQCN` 在执行改写后的 NodeQuality 主脚本前进行 Bash 语法检查
 
-请注意：宝塔、1Panel、OpenClaw、IP 检测等功能仍会执行对应项目提供的第三方脚本。运行前请自行确认来源与风险。
+需要注意：`NQ` 按设计要求直接执行 NodeQuality 官方命令：
+
+```bash
+bash <(curl -sL https://run.NodeQuality.com)
+```
+
+因此该入口不经过 Sail Script 自己的下载校验流程。宝塔、1Panel、OpenClaw、IP 检测等功能同样会执行对应项目提供的第三方脚本，请自行确认来源与风险。
 
 ## 📦 支持范围
 
@@ -135,10 +182,11 @@ Sail Script 中涉及系统变更的操作会尽量遵循以下规则：
 
 Sail Script 的目标不是复制其他大型一键脚本，而是保持 **轻量、清晰、可维护**：
 
-1. 核心功能保持在单个 `sail.sh` 中，便于审计与一键执行。
+1. 核心功能保持在单个 `sail.sh` 入口中，便于审计与一键执行。
 2. 功能按服务器信息、网络、系统维护、Docker、面板、工具、自管理分类。
 3. 同时支持交互式菜单与 CLI，方便人工使用和自动化调用。
 4. 对高风险操作增加确认、权限检查和基本错误处理。
+5. 对特殊国内网络场景使用独立 CDN 启动器，避免把大量第三方源码直接塞进主脚本。
 
 ## 项目地址
 
