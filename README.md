@@ -2,7 +2,7 @@
 
 > 面向 Linux VPS / 服务器的轻量级交互式管理工具箱，由 **SailData.Cloud** 设计。
 
-Sail Script 保持单文件入口、开箱即用的特点，同时补齐服务器概览、网络诊断、NodeQuality、系统维护、Docker 管理、面板安装、自更新和快捷命令等常用能力。
+Sail Script 保持单文件入口、开箱即用的特点，同时补齐服务器概览、网络诊断、NodeQuality、BBR/TCP 优化、系统维护、Docker 管理、面板安装、自更新和快捷命令等常用能力。
 
 ## ✨ 功能
 
@@ -19,6 +19,7 @@ Sail Script 保持单文件入口、开箱即用的特点，同时补齐服务�
 - 公网 IP / ASN 信息
 - NodeQuality 官方一键运行
 - NodeQuality 国内网络受阻运行（CDN 镜像启动器）
+- 一键 BBR / TCP 优化
 - 流媒体解锁与 IP 质量检测
 - Ping 延迟 / 丢包测试
 - HTTP DNS / TCP / TLS / Total 耗时测试
@@ -26,38 +27,59 @@ Sail Script 保持单文件入口、开箱即用的特点，同时补齐服务�
 
 #### NodeQuality 快捷命令
 
-官方直连版本：
-
 ```bash
 ./sail.sh NQ
+./sail.sh NQCN
 ```
 
-等价于直接运行：
+`NQ` 等价于：
 
 ```bash
 bash <(curl -sL https://run.NodeQuality.com)
 ```
 
-国内网络受阻版本：
+`NQCN` 会通过 Sail Script 的 CDN 启动器获取最新版 NodeQuality，并将相关 GitHub Raw / Release 下载入口切换到 CDN 或加速线路。
+
+### 一键 BBR / TCP 优化
+
+默认智能均衡优化：
 
 ```bash
-./sail.sh NQCN
+./sail.sh BBR
 ```
 
-`NQCN` 会通过 Sail Script 的 CDN 启动器获取最新版 NodeQuality，并针对上游脚本中的 GitHub 资源进行加速处理：
+状态查看与不同场景：
 
-- NodeQuality 主脚本：jsDelivr CDN
-- `raw.githubusercontent.com/LloydAsp/NodeQuality/...`：改写为 jsDelivr
-- GitHub Release 下载：通过 GitHub 下载加速代理
-- 执行前进行 `bash -n` 语法检查
+```bash
+./sail.sh BBR status
+./sail.sh BBR balanced
+./sail.sh BBR throughput
+./sail.sh BBR latency
+./sail.sh BBR concurrent
+./sail.sh BBR xanmod
+./sail.sh BBR rollback
+```
 
-镜像启动器位于：
+BBR 模块位于：
 
 ```text
-scripts/nodequality-cn.sh
+scripts/bbr-optimize.sh
 ```
 
-> `NQCN` 不直接 fork / 固化一整份 NodeQuality 源码，而是在运行时取得当前上游版本后修改下载入口，尽量避免上游更新后镜像长期过期。
+主要设计：
+
+- 优先使用当前内核已有的 `bbr`，不为了“优化”而强制换内核
+- 推荐组合为 `BBR + fq`
+- 根据服务器内存自动缩放 TCP socket buffer
+- 提供均衡、高吞吐、低延迟、高并发四种参数档位
+- 写入独立配置 `/etc/sysctl.d/99-sail-bbr.conf`
+- 第一次优化前保存原始 sysctl 状态
+- 检测其他可能冲突的 sysctl 配置
+- 已有 CAKE / TBF / HTB / netem / 多队列 qdisc 时不强制实时覆盖
+- 支持 `rollback` 回滚 Sail Script 写入的网络参数
+- Debian / Ubuntu x86_64 可选安装 XanMod LTS 内核以获得 BBRv3
+
+> BBRv3 与普通主线 BBR 不混淆。脚本会查看 `tcp_bbr` 模块 version；只有明确检测到 v3 时才显示 BBRv3。
 
 ### 系统维护
 
@@ -88,20 +110,18 @@ scripts/nodequality-cn.sh
 ### Sail Script 自管理
 
 - 版本检查
-- 自更新（覆盖前执行 `bash -n` 检查，并尽量保留 `.bak`）
+- 自更新
 - 安装 `/usr/local/bin/sail` 快捷命令
 - 卸载快捷命令
 - 支持交互菜单与 CLI 子命令
 
 ## 🚀 快速使用
 
-直接打开菜单：
-
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/VanSail-Opensource/Sail-Script/main/sail.sh)
 ```
 
-也可以下载后运行：
+或者：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VanSail-Opensource/Sail-Script/main/sail.sh -o sail.sh
@@ -109,7 +129,7 @@ chmod +x sail.sh
 ./sail.sh
 ```
 
-> 当前重构版本正在开发分支 `agent/modernize-sail-script` 中，可先将 URL 中的 `main` 替换为该分支进行测试。`NQCN` 的 CDN 地址固定指向 `main`，因此需要相关文件合并到 `main` 后才能通过正式 CDN 入口测试。
+> 当前新增功能位于开发分支 `agent/modernize-sail-script`。生产 CDN 地址固定指向 `main`，因此相关模块需合并进 `main` 后才能通过正式 CDN 入口运行。
 
 ## ⌨️ CLI 用法
 
@@ -117,6 +137,9 @@ chmod +x sail.sh
 ./sail.sh info
 ./sail.sh NQ
 ./sail.sh NQCN
+./sail.sh BBR
+./sail.sh BBR status
+./sail.sh BBR throughput
 ./sail.sh ports
 ./sail.sh docker status
 ./sail.sh docker install
@@ -136,57 +159,51 @@ chmod +x sail.sh
 sudo ./sail.sh install-shortcut
 ```
 
-以后直接运行：
+以后可直接运行：
 
 ```bash
 sail
 sail info
 sail NQ
 sail NQCN
-sail docker status
+sail BBR
+sail BBR status
 ```
 
 ## 🔐 安全设计
 
-Sail Script 中涉及系统变更的操作会尽量遵循以下规则：
-
 - 修改系统前检查 root 权限
 - 危险或外部脚本操作要求用户确认
-- 远程 Shell 脚本尽量先下载到临时文件，再执行 `bash -n` 语法检查
+- 模块先下载到临时文件，再执行 `bash -n` 语法检查
 - Docker 使用官方 `get.docker.com`
 - Docker Compose 使用官方 GitHub Release 二进制
-- 自更新前先校验 Bash 语法
 - Docker 清理默认不主动删除 volume
-- `NQCN` 在执行改写后的 NodeQuality 主脚本前进行 Bash 语法检查
+- BBR 参数写入独立 sysctl.d 文件，不批量注释或重写系统已有配置
+- BBR 首次优化保存可回滚状态
+- 安装 XanMod 前检查架构、虚拟化类型和发行版
 
-需要注意：`NQ` 按设计要求直接执行 NodeQuality 官方命令：
-
-```bash
-bash <(curl -sL https://run.NodeQuality.com)
-```
-
-因此该入口不经过 Sail Script 自己的下载校验流程。宝塔、1Panel、OpenClaw、IP 检测等功能同样会执行对应项目提供的第三方脚本，请自行确认来源与风险。
+需要注意：`NQ` 按设计要求直接执行 NodeQuality 官方命令，因此该入口不经过 Sail Script 自己的下载校验流程。宝塔、1Panel、OpenClaw、IP 检测等功能同样会执行对应项目提供的第三方脚本。
 
 ## 📦 支持范围
 
-主要面向常见 Linux 服务器发行版：
+主要面向：
 
 - Debian / Ubuntu
 - Fedora / RHEL / Rocky Linux / AlmaLinux
 - Alpine Linux
 - Arch Linux
 
-部分功能依赖 `systemd`、`curl`、`iproute2` 等组件；脚本会在多数情况下进行检测并给出提示。
+XanMod BBRv3 自动安装当前仅支持 **Debian / Ubuntu x86_64**，且不适用于无法自行更换内核的 LXC / OpenVZ / Docker 等容器型环境。
 
 ## 🧭 设计方向
 
-Sail Script 的目标不是复制其他大型一键脚本，而是保持 **轻量、清晰、可维护**：
+Sail Script 的目标不是复制大型一键脚本，而是保持 **轻量、清晰、可维护**：
 
-1. 核心功能保持在单个 `sail.sh` 入口中，便于审计与一键执行。
-2. 功能按服务器信息、网络、系统维护、Docker、面板、工具、自管理分类。
-3. 同时支持交互式菜单与 CLI，方便人工使用和自动化调用。
-4. 对高风险操作增加确认、权限检查和基本错误处理。
-5. 对特殊国内网络场景使用独立 CDN 启动器，避免把大量第三方源码直接塞进主脚本。
+1. `sail.sh` 保持为统一入口。
+2. NodeQuality 国内版、BBR 等复杂功能拆为独立模块。
+3. 同时支持交互式菜单与 CLI。
+4. 对高风险操作增加确认、权限检查、备份与回滚。
+5. 借鉴成熟脚本的优化思路，但保留独立实现，避免整份复制第三方项目。
 
 ## 项目地址
 
