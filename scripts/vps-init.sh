@@ -2,11 +2,12 @@
 # Sail Script - VPS initialization / hardening assistant
 set -uo pipefail
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 STATE_DIR="/var/lib/sail-script/init"
 SSH_MAIN="/etc/ssh/sshd_config"
 SSH_SNIPPET="/etc/ssh/sshd_config.d/99-sail-init.conf"
 F2B_JAIL="/etc/fail2ban/jail.d/99-sail-sshd.local"
+APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-300}"
 
 if [[ -t 1 && "${NO_COLOR:-0}" != "1" ]]; then
  R=$'\033[31m'; G=$'\033[32m'; Y=$'\033[33m'; B=$'\033[34m'; C=$'\033[36m'; N=$'\033[0m'; BD=$'\033[1m'
@@ -30,16 +31,45 @@ header(){
 
 pkg_manager(){ local p; for p in apt-get dnf yum apk pacman; do has "$p" && { printf '%s' "$p"; return 0; }; done; return 1; }
 
+apt_lock_holders(){
+ local pids=""
+ if has fuser; then
+  pids="$(fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' ')"
+ fi
+ if [[ -n "$pids" ]]; then
+  ps -o pid=,ppid=,etime=,stat=,cmd= -p ${pids} 2>/dev/null || true
+ else
+  ps -eo pid=,ppid=,etime=,stat=,cmd= 2>/dev/null | grep -E '(^|/)(apt|apt-get|dpkg|unattended-upgrade)( |$)' | grep -v grep || true
+ fi
+}
+
+apt_safe(){
+ local action="${1:-}"; shift || true
+ local rc
+ info "APT 操作：${action}（dpkg 锁最多等待 ${APT_LOCK_TIMEOUT} 秒；下载失败最多重试 3 次）"
+ DEBIAN_FRONTEND=noninteractive apt-get \
+  -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}" \
+  -o Acquire::Retries=3 \
+  "$action" "$@"
+ rc=$?
+ if [[ $rc -ne 0 ]]; then
+  err "APT 操作失败（退出码 ${rc}）。"
+  warn "如果仍是 dpkg/apt 锁占用，请检查下面的包管理进程；Sail 不会删除 lock 文件，也不会自动 kill apt/dpkg。"
+  apt_lock_holders
+ fi
+ return "$rc"
+}
+
 install_common_tools(){
  need_root || return 1
  local pm; pm="$(pkg_manager)" || { err "无法识别包管理器。"; return 1; }
  info "安装常用命令；不会执行整机发行版升级。"
  case "$pm" in
   apt-get)
-   apt-get update || return 1
-   DEBIAN_FRONTEND=noninteractive apt-get install -y \
+   apt_safe update || return 1
+   apt_safe install -y \
     curl wget git vim nano jq unzip zip tar rsync tmux htop lsof ca-certificates gnupg \
-    sudo cron iproute2 iputils-ping dnsutils net-tools socat openssh-client openssh-server fail2ban
+    sudo cron iproute2 iputils-ping dnsutils net-tools socat openssh-client openssh-server fail2ban || return 1
    ;;
   dnf)
    dnf install -y curl wget git vim nano jq unzip zip tar rsync tmux htop lsof ca-certificates gnupg2 \
@@ -297,6 +327,9 @@ Sail VPS Init v${VERSION}
   add-key    添加 SSH 公钥
   key-only   关闭 SSH 密码登录
   status     查看状态
+
+环境变量：
+  APT_LOCK_TIMEOUT=300   Debian/Ubuntu 等待 dpkg/apt 锁的秒数
 EOF
 }
 
