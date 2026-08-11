@@ -5,7 +5,7 @@
 # Repository: https://github.com/VanSail-Opensource/Sail-Script
 # ============================================================
 
-SAIL_VERSION="2.3.0"
+SAIL_VERSION="2.3.1"
 REPO_SLUG="VanSail-Opensource/Sail-Script"
 REPO_URL="https://github.com/${REPO_SLUG}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/main"
@@ -17,6 +17,7 @@ INIT_CDN_URL="${CDN_BASE}/scripts/vps-init.sh"
 INSTALL_DIR="/usr/local/lib/sail-script"
 INSTALL_PATH="${INSTALL_DIR}/sail.sh"
 SHORTCUT_PATH="/usr/local/bin/sail"
+APT_LOCK_TIMEOUT="${APT_LOCK_TIMEOUT:-300}"
 
 set -o pipefail
 
@@ -81,6 +82,35 @@ os_pretty_name() { if [[ -r /etc/os-release ]]; then (. /etc/os-release; printf 
 detect_pkg_manager() { local pm; for pm in apt-get dnf yum apk pacman; do has_cmd "$pm" && { printf '%s' "$pm"; return 0; }; done; return 1; }
 cpu_model() { if has_cmd lscpu; then lscpu 2>/dev/null | awk -F: '/Model name/ {sub(/^[ \t]+/,"",$2);print $2;exit}'; else awk -F: '/model name|Hardware|Processor/ {sub(/^[ \t]+/,"",$2);print $2;exit}' /proc/cpuinfo 2>/dev/null; fi; }
 virtualization_type() { if has_cmd systemd-detect-virt; then systemd-detect-virt 2>/dev/null || printf 'none'; elif has_cmd virt-what; then virt-what 2>/dev/null | head -n1; else printf '未知'; fi; }
+
+apt_lock_holders() {
+    local pids=""
+    if has_cmd fuser; then
+        pids="$(fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -u | tr '\n' ' ')"
+    fi
+    if [[ -n "$pids" ]]; then
+        ps -o pid=,ppid=,etime=,stat=,cmd= -p ${pids} 2>/dev/null || true
+    else
+        ps -eo pid=,ppid=,etime=,stat=,cmd= 2>/dev/null | grep -E '(^|/)(apt|apt-get|dpkg|unattended-upgrade)( |$)' | grep -v grep || true
+    fi
+}
+
+apt_safe() {
+    local action="${1:-}"; shift || true
+    local rc
+    info "APT 操作：${action}（锁等待 ${APT_LOCK_TIMEOUT}s，下载重试 3 次）"
+    DEBIAN_FRONTEND=noninteractive apt-get \
+        -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}" \
+        -o Acquire::Retries=3 \
+        "$action" "$@"
+    rc=$?
+    if [[ $rc -ne 0 ]]; then
+        error "APT 操作失败（退出码 ${rc}）。"
+        warn "若为 apt/dpkg 锁占用，以下是可能的占用进程。Sail 不会删除 lock 文件，也不会自动终止 apt/dpkg。"
+        apt_lock_holders
+    fi
+    return "$rc"
+}
 
 basic_info() {
     clear_screen; header; section "服务器概览"
@@ -163,11 +193,11 @@ EOF
 
 system_update() {
     require_root || return 1; local pm; pm="$(detect_pkg_manager)" || { error "未识别包管理器。"; return 1; }
-    case "$pm" in apt-get) apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y;; dnf) dnf upgrade -y;; yum) yum update -y;; apk) apk update && apk upgrade;; pacman) pacman -Syu --noconfirm;; esac
+    case "$pm" in apt-get) apt_safe update && apt_safe upgrade -y;; dnf) dnf upgrade -y;; yum) yum update -y;; apk) apk update && apk upgrade;; pacman) pacman -Syu --noconfirm;; esac
 }
 system_cleanup() {
     require_root || return 1; local pm; pm="$(detect_pkg_manager)" || return 1
-    case "$pm" in apt-get) apt-get autoremove -y; apt-get autoclean -y; apt-get clean;; dnf) dnf autoremove -y || true; dnf clean all;; yum) yum autoremove -y || true; yum clean all;; apk) rm -rf /var/cache/apk/*;; pacman) pacman -Sc --noconfirm;; esac
+    case "$pm" in apt-get) apt_safe autoremove -y; apt_safe autoclean -y; apt_safe clean;; dnf) dnf autoremove -y || true; dnf clean all;; yum) yum autoremove -y || true; yum clean all;; apk) rm -rf /var/cache/apk/*;; pacman) pacman -Sc --noconfirm;; esac
     success "清理完成。"
 }
 journal_cleanup() { require_root || return 1; has_cmd journalctl || { error "没有 journalctl。"; return 1; }; warn "仅保留最近 7 天 journal。"; confirm "确认清理？" && journalctl --vacuum-time=7d; }
