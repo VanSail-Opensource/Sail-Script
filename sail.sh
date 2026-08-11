@@ -5,7 +5,7 @@
 # Repository: https://github.com/VanSail-Opensource/Sail-Script
 # ============================================================
 
-SAIL_VERSION="2.2.0"
+SAIL_VERSION="2.3.0"
 REPO_SLUG="VanSail-Opensource/Sail-Script"
 REPO_URL="https://github.com/${REPO_SLUG}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/main"
@@ -13,6 +13,7 @@ CDN_BASE="https://cdn.jsdelivr.net/gh/${REPO_SLUG}@main"
 RAW_URL="${RAW_BASE}/sail.sh"
 NQCN_CDN_URL="${CDN_BASE}/scripts/nodequality-cn.sh"
 BBR_CDN_URL="${CDN_BASE}/scripts/bbr-optimize.sh"
+INIT_CDN_URL="${CDN_BASE}/scripts/vps-init.sh"
 INSTALL_DIR="/usr/local/lib/sail-script"
 INSTALL_PATH="${INSTALL_DIR}/sail.sh"
 SHORTCUT_PATH="/usr/local/bin/sail"
@@ -108,6 +109,12 @@ run_bbr() {
     local action="${1:-auto}"
     clear_screen; header; section "一键 BBR / TCP 优化"
     run_cdn_module "$BBR_CDN_URL" "Sail BBR Optimizer" "$action"
+}
+
+run_init() {
+    local action="${1:-menu}"
+    clear_screen; header; section "VPS 一键初始化"
+    run_cdn_module "$INIT_CDN_URL" "Sail VPS Init" "$action"
 }
 
 streaming_check() { clear_screen; header; section "流媒体解锁 / IP 质量检测"; warn "将执行第三方脚本：https://ip.check.place"; confirm "确认执行？" || return 0; run_remote_bash "https://ip.check.place" -y; pause; }
@@ -206,6 +213,15 @@ Sail Script v${SAIL_VERSION}
 
   menu                     打开交互式主菜单
   info                     显示服务器概览
+  INIT                     打开 VPS 初始化菜单
+  INIT basic               常用工具 + Fail2ban 基础初始化
+  INIT guided              完整 VPS 初始化向导
+  INIT packages            安装常用命令
+  INIT fail2ban            配置 Fail2ban SSH 防护
+  INIT ssh-port            修改 SSH 高位端口
+  INIT add-key             添加 SSH 公钥
+  INIT key-only            关闭 SSH 密码登录
+  INIT status              查看 SSH / Fail2ban 状态
   NQ                       NodeQuality 官方一键运行
   NQCN                     NodeQuality 国内网络受阻运行
   BBR                      一键智能 BBR + fq 优化
@@ -232,9 +248,9 @@ EOF
 main_menu() {
     while true; do
         clear_screen; header
-        printf '\n 1. 服务器概览\n 2. 网络与 IP 工具\n 3. 系统维护\n 4. Docker 管理\n 5. 面板安装\n 6. 实用工具\n 7. Sail Script 管理\n 0. 退出\n\n'
-        read -r -p "请输入选项 [0-7]: " c
-        case "$c" in 1) basic_info; pause;; 2) network_menu;; 3) system_maintenance_menu;; 4) docker_menu;; 5) panel_menu;; 6) tools_menu;; 7) script_management_menu;; 0) printf '\nDesigned by SailData.Cloud\n'; return 0;; *) warn "无效选项。"; sleep 1;; esac
+        printf '\n 1. 服务器概览\n 2. 网络与 IP 工具\n 3. VPS 一键初始化\n 4. 系统维护\n 5. Docker 管理\n 6. 面板安装\n 7. 实用工具\n 8. Sail Script 管理\n 0. 退出\n\n'
+        read -r -p "请输入选项 [0-8]: " c
+        case "$c" in 1) basic_info; pause;; 2) network_menu;; 3) run_init menu;; 4) system_maintenance_menu;; 5) docker_menu;; 6) panel_menu;; 7) tools_menu;; 8) script_management_menu;; 0) printf '\nDesigned by SailData.Cloud\n'; return 0;; *) warn "无效选项。"; sleep 1;; esac
     done
 }
 
@@ -243,6 +259,7 @@ dispatch() {
     case "$cmd" in
         ""|menu) main_menu;;
         info) basic_info;;
+        INIT) run_init "${sub:-menu}";;
         NQ) run_nq;;
         NQCN) run_nq_cn;;
         BBR) run_bbr "${sub:-auto}";;
