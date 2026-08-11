@@ -5,10 +5,11 @@
 # Repository: https://github.com/VanSail-Opensource/Sail-Script
 # ============================================================
 
-SAIL_VERSION="2.0.0"
+SAIL_VERSION="2.1.0"
 REPO_SLUG="VanSail-Opensource/Sail-Script"
 REPO_URL="https://github.com/${REPO_SLUG}"
 RAW_URL="https://raw.githubusercontent.com/${REPO_SLUG}/main/sail.sh"
+NQCN_CDN_URL="https://cdn.jsdelivr.net/gh/${REPO_SLUG}@main/scripts/nodequality-cn.sh"
 INSTALL_DIR="/usr/local/lib/sail-script"
 INSTALL_PATH="${INSTALL_DIR}/sail.sh"
 SHORTCUT_PATH="/usr/local/bin/sail"
@@ -259,6 +260,54 @@ public_ip_info() {
     pause
 }
 
+run_nq() {
+    clear_screen
+    header
+    section "NodeQuality (NQ) 官方一键运行"
+
+    if ! has_cmd curl; then
+        error "运行 NodeQuality 需要 curl。"
+        return 1
+    fi
+
+    info "官方入口：https://run.NodeQuality.com"
+    info "执行：bash <(curl -sL https://run.NodeQuality.com)"
+    bash <(curl -sL https://run.NodeQuality.com)
+}
+
+run_nq_cn() {
+    clear_screen
+    header
+    section "NodeQuality (NQ) 国内网络受阻运行"
+
+    if ! has_cmd curl; then
+        error "运行 NodeQuality 需要 curl。"
+        return 1
+    fi
+
+    local temp rc
+    temp="$(mktemp)" || return 1
+
+    info "通过 Sail Script CDN 镜像启动器加载 NodeQuality。"
+    info "CDN：$NQCN_CDN_URL"
+    if ! curl -fsSL --connect-timeout 10 --retry 2 --retry-delay 1 "$NQCN_CDN_URL" -o "$temp"; then
+        rm -f "$temp"
+        error "NQCN CDN 启动器下载失败。"
+        return 1
+    fi
+
+    if ! bash -n "$temp" >/dev/null 2>&1; then
+        rm -f "$temp"
+        error "NQCN 启动器未通过 Bash 语法检查，已停止执行。"
+        return 1
+    fi
+
+    bash "$temp"
+    rc=$?
+    rm -f "$temp"
+    return "$rc"
+}
+
 streaming_check() {
     clear_screen
     header
@@ -336,20 +385,24 @@ network_menu() {
         section "网络与 IP 工具"
         cat <<'EOF'
  1. 公网 IP / ASN 信息
- 2. 流媒体解锁 & IP 质量检测
- 3. Ping 延迟 / 丢包测试
- 4. HTTP 连接耗时测试
- 5. 查看监听端口
+ 2. NodeQuality 一键运行（NQ / 官方直连）
+ 3. NodeQuality 国内网络受阻运行（NQCN / CDN）
+ 4. 流媒体解锁 & IP 质量检测
+ 5. Ping 延迟 / 丢包测试
+ 6. HTTP 连接耗时测试
+ 7. 查看监听端口
  0. 返回主菜单
 EOF
         printf '%s\n' "------------------------------------------------------------"
-        read -r -p "请输入选项 [0-5]: " choice
+        read -r -p "请输入选项 [0-7]: " choice
         case "$choice" in
             1) public_ip_info ;;
-            2) streaming_check ;;
-            3) ping_test ;;
-            4) http_latency_test ;;
-            5) show_listening_ports ;;
+            2) run_nq; pause ;;
+            3) run_nq_cn; pause ;;
+            4) streaming_check ;;
+            5) ping_test ;;
+            6) http_latency_test ;;
+            7) show_listening_ports ;;
             0) return 0 ;;
             *) warn "无效选项。"; sleep 1 ;;
         esac
@@ -892,6 +945,8 @@ Sail Script v${SAIL_VERSION}
 命令：
   menu                     打开交互式主菜单（默认）
   info                     显示服务器概览
+  NQ                       NodeQuality 官方一键运行
+  NQCN                     NodeQuality 国内网络受阻运行（CDN 镜像）
   ipcheck                  流媒体解锁 / IP 质量检测
   ports                    查看监听端口
   update                   更新系统软件包
@@ -911,8 +966,10 @@ Sail Script v${SAIL_VERSION}
 
 示例：
   bash <(curl -fsSL ${RAW_URL})
-  bash <(curl -fsSL ${RAW_URL}) info
-  bash <(curl -fsSL ${RAW_URL}) docker install
+  ./sail.sh NQ
+  ./sail.sh NQCN
+  ./sail.sh info
+  ./sail.sh docker install
 EOF
 }
 
@@ -958,6 +1015,12 @@ dispatch() {
             ;;
         info)
             basic_info
+            ;;
+        NQ)
+            run_nq
+            ;;
+        NQCN)
+            run_nq_cn
             ;;
         ipcheck)
             streaming_check
