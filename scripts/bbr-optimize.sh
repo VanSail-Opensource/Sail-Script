@@ -117,15 +117,15 @@ auto_buffer_bytes() {
     mem="$(memory_mb)"
     mem="${mem:-1024}"
     if (( mem <= 384 )); then
-        printf '4194304'       # 4 MiB
+        printf '4194304'
     elif (( mem <= 768 )); then
-        printf '8388608'       # 8 MiB
+        printf '8388608'
     elif (( mem <= 1536 )); then
-        printf '16777216'      # 16 MiB
+        printf '16777216'
     elif (( mem <= 4096 )); then
-        printf '33554432'      # 32 MiB
+        printf '33554432'
     else
-        printf '67108864'      # 64 MiB
+        printf '67108864'
     fi
 }
 
@@ -187,7 +187,7 @@ apply_fq_live() {
         [[ -n "$dev" ]] || continue
         qline="$(tc qdisc show dev "$dev" 2>/dev/null | head -n1)"
         case "$qline" in
-            *" qdisc mq "*|*" qdisc noqueue "*|*" htb "*|*" tbf "*|*|*" cake "*|*" netem "*)
+            *" qdisc mq "*|*" qdisc noqueue "*|*" htb "*|*" tbf "*|*" cake "*|*" netem "*)
                 warn "$dev 当前存在多队列/整形 qdisc，跳过实时替换，仅设置系统默认 fq。"
                 ;;
             *)
@@ -414,7 +414,7 @@ install_xanmod() {
     arch="$(uname -m)"
     virt="$(virt_type)"
     if [[ "$arch" != "x86_64" && "$arch" != "amd64" ]]; then
-        err "XanMod 官方仓库的 BBRv3 路径仅面向 x86_64；当前架构：$arch"
+        err "XanMod 官方 BBRv3 内核自动安装仅面向 x86_64；当前架构：$arch"
         return 1
     fi
     case "$virt" in
